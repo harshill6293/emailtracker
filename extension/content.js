@@ -28,6 +28,22 @@ function generateUUID() {
 // Gmail's DOM structure is not guaranteed to stay stable. We try multiple
 // selectors and fall back gracefully. We NEVER rely on minified class names.
 
+// Given a send button, find its compose container — either a dialog (new compose /
+// pop-out reply) or the nearest ancestor that also contains the message body
+// (inline reply within a thread).
+function findComposeContainer(sendButton) {
+  const dialog = sendButton.closest('[role="dialog"]');
+  if (dialog) return dialog;
+
+  // Inline reply: walk up until we find an ancestor that holds the editable body
+  let el = sendButton.parentElement;
+  while (el && el !== document.body) {
+    if (getBodyElement(el)) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
 function findSendButton(compose) {
   // Try stable selectors first (aria-label, data-tooltip)
   const selectors = [
@@ -96,7 +112,12 @@ function getSubject(compose) {
     compose.querySelector('input[name="subjectbox"]') ||
     compose.querySelector('[name="subjectbox"]') ||
     compose.querySelector('[aria-label="Subject"]');
-  return subjectEl ? subjectEl.value.trim() : '(no subject)';
+  if (subjectEl?.value?.trim()) return subjectEl.value.trim();
+
+  // Inline reply: subject lives in the thread header, not in the compose box.
+  // Gmail sets the page title to "Subject - email - Gmail" when a thread is open.
+  const title = document.title.replace(/\s*-\s*[^-]+\s*-\s*Gmail\s*$/i, '').trim();
+  return title || '(no subject)';
 }
 
 function getBodyElement(compose) {
@@ -284,12 +305,26 @@ function attachSendHandler(compose, sendButton) {
 }
 
 function scanForComposes(root) {
-  // Gmail compose windows: role="dialog" with a send button inside
-  const dialogs = root.querySelectorAll('[role="dialog"]');
-  dialogs.forEach(dialog => {
-    const sendBtn = findSendButton(dialog);
-    if (sendBtn) attachSendHandler(dialog, sendBtn);
-  });
+  // Scan for send buttons anywhere in root — covers new compose dialogs,
+  // pop-out replies, AND inline reply boxes within conversation threads.
+  const sendButtonSelectors = [
+    '[data-tooltip="Send"]',
+    '[data-tooltip*="Send"]',
+    '[aria-label*="Send "]',
+  ];
+
+  const seen = new Set();
+  for (const sel of sendButtonSelectors) {
+    const matches = [];
+    if (root.matches?.(sel)) matches.push(root);
+    root.querySelectorAll?.(sel).forEach(el => matches.push(el));
+    for (const btn of matches) {
+      if (seen.has(btn)) continue;
+      seen.add(btn);
+      const compose = findComposeContainer(btn);
+      if (compose) attachSendHandler(compose, btn);
+    }
+  }
 }
 
 // ─── MutationObserver — watch for Gmail compose windows ──────────────────────
@@ -298,12 +333,6 @@ const observer = new MutationObserver(mutations => {
   for (const mutation of mutations) {
     for (const node of mutation.addedNodes) {
       if (node.nodeType !== Node.ELEMENT_NODE) continue;
-      // Check if this node IS a compose dialog, or contains one
-      if (node.getAttribute?.('role') === 'dialog') {
-        const sendBtn = findSendButton(node);
-        if (sendBtn) attachSendHandler(node, sendBtn);
-      }
-      // Scan inside it too
       scanForComposes(node);
     }
   }
