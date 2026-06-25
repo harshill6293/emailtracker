@@ -44,7 +44,8 @@ async function fetchAndStoreEvents() {
 
     // Fire notifications for new opens
     for (const email of emails) {
-      const opens = (email.events || []).filter(ev => ev.type === 'open' && ev.fingerprint !== 'apple_prefetch');
+      const PREFETCH_LABELS = new Set(['apple_prefetch', 'gmail_prefetch']);
+      const opens = (email.events || []).filter(ev => ev.type === 'open' && !PREFETCH_LABELS.has(ev.fingerprint));
       const prevCount = prevOpenMap.get(email.tracking_id) || 0;
       if (opens.length > prevCount && opens.length === 1) {
         // First open — notify

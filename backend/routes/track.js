@@ -138,6 +138,20 @@ function isApplePrefetch(userAgent) {
   );
 }
 
+// --- Helper: Gmail image proxy detection ---
+// Gmail routes all images through its own caching proxy (googleusercontent.com / ggpht.com)
+// when rendering emails — including the sender's own Sent folder view. These hits arrive
+// immediately after sending with Google's IP and UA, not the recipient's, so they must be
+// excluded from open counts just like Apple prefetch.
+
+function isGmailProxy(userAgent) {
+  if (!userAgent) return false;
+  return (
+    userAgent.includes('GoogleImageProxy') ||
+    userAgent.includes('ggpht.com')
+  );
+}
+
 // ============================================================
 // ROUTE: GET /t/o/:signedId
 // Email open tracking pixel.
@@ -172,7 +186,10 @@ router.get('/o/:signedId', async (req, res) => {
       const userAgent = req.headers['user-agent'] || '';
       const ipPrefix = truncateIp(ip);
       const fingerprint = sessionFingerprint(ip, userAgent);
-      const prefetch = isApplePrefetch(userAgent);
+      const prefetchLabel = isApplePrefetch(userAgent) ? 'apple_prefetch'
+                         : isGmailProxy(userAgent)   ? 'gmail_prefetch'
+                         : null;
+      const prefetch = prefetchLabel !== null;
 
       // Skip events from the sender's own browser loading the pixel while composing.
       // Require BOTH ip prefix and fingerprint (IP + User-Agent hash) to match so that
@@ -193,8 +210,8 @@ router.get('/o/:signedId', async (req, res) => {
          VALUES ($1, 'open', $2, $3, $4, $5, $6)`,
         [
           emailTrackingId,
-          prefetch ? null : ipPrefix,       // don't store IP for Apple prefetches
-          prefetch ? 'apple_prefetch' : fingerprint,
+          prefetch ? null : ipPrefix,
+          prefetchLabel ?? fingerprint,     // label for known prefetchers, real hash otherwise
           isForward,
           originalEventId,
           userAgent.slice(0, 500)
