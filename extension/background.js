@@ -43,11 +43,11 @@ async function fetchAndStoreEvents() {
     await chrome.storage.local.set({ storedEmails: emails, lastFetch: Date.now() });
 
     // Fire notifications for new opens
+    const PREFETCH_LABELS = new Set(['apple_prefetch', 'gmail_prefetch']);
     for (const email of emails) {
-      const PREFETCH_LABELS = new Set(['apple_prefetch', 'gmail_prefetch']);
       const opens = (email.events || []).filter(ev => ev.type === 'open' && !PREFETCH_LABELS.has(ev.fingerprint));
       const prevCount = prevOpenMap.get(email.tracking_id) || 0;
-      if (opens.length > prevCount && opens.length === 1) {
+      if (opens.length > prevCount && prevCount === 0) {
         // First open — notify
         chrome.notifications.create(`open-${email.tracking_id}`, {
           type: 'basic',

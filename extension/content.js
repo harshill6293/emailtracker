@@ -240,7 +240,13 @@ async function registerAndInject(compose) {
     return false;
   }
 
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    logError('Backend returned non-JSON response');
+    return false;
+  }
   const { signedEmailId, links: signedLinks = [] } = data;
 
   if (!signedEmailId) {
@@ -290,7 +296,8 @@ function attachSendHandler(compose, sendButton) {
       await registerAndInject(compose);
     } catch (err) {
       logError('Unexpected error in registerAndInject:', err);
-      processingComposes.delete(compose);
+      // Do NOT delete compose from processingComposes here — the setTimeout
+      // re-click below needs it present so the handler passes through to Gmail.
     }
 
     // Re-trigger the send button click — our handler will see processingComposes
