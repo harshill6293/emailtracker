@@ -95,6 +95,7 @@ async function detectForward(emailTrackingId, ipPrefix, fingerprint) {
      WHERE email_tracking_id = $1
        AND event_type = 'open'
        AND is_forward = false
+       AND ip_prefix IS NOT NULL
      ORDER BY occurred_at ASC
      LIMIT 1`,
     [emailTrackingId]
@@ -114,6 +115,7 @@ async function detectForward(emailTrackingId, ipPrefix, fingerprint) {
      WHERE email_tracking_id = $1
        AND event_type = 'open'
        AND is_forward = false
+       AND ip_prefix IS NOT NULL
      ORDER BY occurred_at ASC LIMIT 1`,
     [emailTrackingId]
   );

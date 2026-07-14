@@ -5,6 +5,15 @@ const lastFetchEl = document.getElementById('last-fetch');
 const refreshBtn = document.getElementById('refresh-btn');
 const errorBanner = document.getElementById('error-banner');
 
+// Server-side prefetches (Apple Mail Privacy Protection, Gmail's own image proxy
+// rendering the sender's just-sent message) are labeled by the backend so they
+// can be excluded from open counts — mirrors PREFETCH_LABELS in background.js.
+const PREFETCH_LABELS = new Set(['apple_prefetch', 'gmail_prefetch']);
+const PREFETCH_TEXT = {
+  apple_prefetch: 'Apple Mail prefetch',
+  gmail_prefetch: 'Gmail proxy prefetch'
+};
+
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -26,12 +35,12 @@ function makeEventRow(ev, linksMap) {
   const text = document.createElement('span');
 
   if (ev.type === 'open') {
-    const isPrefetch = ev.fingerprint === 'apple_prefetch';
+    const isPrefetch = PREFETCH_LABELS.has(ev.fingerprint);
     dot.className = isPrefetch ? 'event-dot' : 'event-dot dot-open';
     dot.style.background = isPrefetch ? '#ccc' : '';
     const fwdTag = ev.is_forward ? ' ↩ forwarded' : '';
     text.textContent = isPrefetch
-      ? `Apple Mail prefetch — ${formatDate(ev.occurred_at)}`
+      ? `${PREFETCH_TEXT[ev.fingerprint] || 'Prefetch'} — ${formatDate(ev.occurred_at)}`
       : `Opened${fwdTag} — ${formatDate(ev.occurred_at)}`;
   } else if (ev.type === 'click') {
     dot.className = 'event-dot dot-click';
@@ -63,8 +72,8 @@ function renderEmails(emails) {
     const links = email.links || [];
     const linksMap = Object.fromEntries(links.map(l => [l.id, l.url]));
 
-    const opens = events.filter(e => e.type === 'open' && e.fingerprint !== 'apple_prefetch');
-    const prefetches = events.filter(e => e.fingerprint === 'apple_prefetch');
+    const opens = events.filter(e => e.type === 'open' && !PREFETCH_LABELS.has(e.fingerprint));
+    const prefetches = events.filter(e => PREFETCH_LABELS.has(e.fingerprint));
     const clicks = events.filter(e => e.type === 'click');
     const forwards = opens.filter(e => e.is_forward);
 
@@ -139,7 +148,7 @@ function renderEmails(emails) {
     if (prefetches.length > 0) {
       const note = document.createElement('div');
       note.className = 'prefetch-note';
-      note.textContent = `${prefetches.length} Apple Mail prefetch(es) excluded from open count.`;
+      note.textContent = `${prefetches.length} prefetch(es) excluded from open count.`;
       eventsEl.appendChild(note);
     }
 
